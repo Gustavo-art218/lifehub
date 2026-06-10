@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
 import AuthGuard from "@/components/AuthGuard";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 import {
   addDoc,
@@ -13,6 +14,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  where,
   doc,
   updateDoc,
 } from "firebase/firestore";
@@ -31,33 +33,110 @@ export default function SubscriptionsPage() {
   const [subscriptions, setSubscriptions] =
     useState<any[]>([]);
 
-  useEffect(() => {
+ useEffect(() => {
 
-    const q = query(
-      collection(db, "subscriptions"),
-      orderBy("createdAt", "desc")
+  const unsubscribeAuth =
+    onAuthStateChanged(
+      auth,
+      (user) => {
+
+        if (!user) return;
+
+        const q = query(
+        collection(db, "subscriptions"),
+      where("userId", "==", user.uid)
+      
     );
 
-    const unsubscribe =
-      onSnapshot(
-        q,
-        (snapshot) => {
+        const unsubscribeData =
+          onSnapshot(
+            q,
+            (snapshot) => {
 
-          const items: any[] = [];
+              const items: any[] = [];
 
-          snapshot.forEach((doc) => {
+              snapshot.forEach(
+                (doc) => {
 
-            items.push({
-              id: doc.id,
-              ...doc.data(),
-            });
+                  items.push({
+                    id: doc.id,
+                    ...doc.data(),
+                  });
 
-          });
+                }
+              );
 
-          setSubscriptions(items);
+              setSubscriptions(
+                items
+              );
 
-        }
-      );
+            }
+          );
+
+        return () =>
+          unsubscribeData();
+
+      }
+    );
+
+  return () =>
+    unsubscribeAuth();
+
+}, []);
+
+const addSubscription = async () => {
+  console.log("Add Subscription clicked");
+
+  if (
+    !serviceName ||
+    !price ||
+    !renewalDate
+  ) {
+    alert("Complete all fields");
+    return;
+  }
+
+  try {
+
+   const user = auth.currentUser;
+
+if (!user) {
+  alert("Please login again");
+  return;
+}
+
+await addDoc(
+  collection(db, "subscriptions"),
+  {
+    userId: user.uid,
+    serviceName,
+    price: Number(price),
+    renewalDate,
+    status: "Active",
+    createdAt: new Date(),
+  }
+);
+
+    setServiceName("");
+    setPrice("");
+    setRenewalDate("");
+
+    alert(
+      "Subscription saved successfully"
+    );
+
+  } catch (error) {
+
+    console.error(error);
+
+    alert(
+      "Failed to save subscription"
+    );
+
+  }
+
+};
+
 const toggleSubscriptionStatus = async (
   subscriptionId: string,
   currentStatus: string
@@ -90,44 +169,7 @@ const toggleSubscriptionStatus = async (
   }
 
 };
-    return () => unsubscribe();
 
-  }, []);
-
-  const addSubscription = async () => {
-      };
-  const toggleSubscriptionStatus = async (
-  subscriptionId: string,
-  currentStatus: string
-) => {
-
-  try {
-
-    await updateDoc(
-      doc(
-        db,
-        "subscriptions",
-        subscriptionId
-      ),
-      {
-        status:
-          currentStatus === "Active"
-            ? "Cancelled"
-            : "Active",
-      }
-    );
-
-  } catch (error) {
-
-    console.error(error);
-
-    alert(
-      "Failed to update subscription"
-    );
-
-  }
-
-};
   return (
     <AuthGuard>
     <div className="flex">
@@ -139,8 +181,8 @@ const toggleSubscriptionStatus = async (
         <div className="mb-8">
 
           <h1 className="text-4xl font-bold">
-            Subscriptions
-          </h1>
+           Subscriptions
+        </h1>
 
           <p className="text-slate-500 mt-2">
             Manage recurring subscriptions
@@ -194,9 +236,7 @@ const toggleSubscriptionStatus = async (
             />
 
             <button
-              onClick={
-                addSubscription
-              }
+  onClick={addSubscription}
               className="bg-slate-900 text-white px-6 py-3 rounded-2xl"
             >
               Save Subscription

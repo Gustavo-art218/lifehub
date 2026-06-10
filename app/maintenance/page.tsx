@@ -5,14 +5,15 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
 import AuthGuard from "@/components/AuthGuard";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 import {
   addDoc,
   collection,
   onSnapshot,
-  orderBy,
   query,
+  where,
   doc,
   updateDoc,
 } from "firebase/firestore";
@@ -30,32 +31,55 @@ export default function MaintenancePage() {
 
   useEffect(() => {
 
-    const q = query(
-      collection(db, "maintenance"),
-      orderBy("createdAt", "desc")
+  const unsubscribeAuth =
+    onAuthStateChanged(
+      auth,
+      (user) => {
+
+        if (!user) return;
+
+        const q = query(
+          collection(db, "maintenance"),
+          where(
+            "userId",
+            "==",
+            user.uid
+          )
+        );
+
+        const unsubscribeTasks =
+          onSnapshot(
+            q,
+            (snapshot) => {
+
+              const items: any[] = [];
+
+              snapshot.forEach(
+                (docItem) => {
+
+                  items.push({
+                    id: docItem.id,
+                    ...docItem.data(),
+                  });
+
+                }
+              );
+
+              setTasks(items);
+
+            }
+          );
+
+        return () =>
+          unsubscribeTasks();
+
+      }
     );
 
-    const unsubscribe =
-      onSnapshot(q, (snapshot) => {
+  return () =>
+    unsubscribeAuth();
 
-        const items: any[] = [];
-
-        snapshot.forEach((docItem) => {
-
-          items.push({
-            id: docItem.id,
-            ...docItem.data(),
-          });
-
-        });
-
-        setTasks(items);
-
-      });
-
-    return () => unsubscribe();
-
-  }, []);
+}, []);
 
   const addTask = async () => {
 
@@ -66,15 +90,23 @@ export default function MaintenancePage() {
 
     try {
 
-      await addDoc(
-        collection(db, "maintenance"),
-        {
-          taskName,
-          dueDate,
-          status: "Pending",
-          createdAt: new Date(),
-        }
-      );
+      const user = auth.currentUser;
+
+if (!user) {
+  alert("Not logged in");
+  return;
+}
+
+await addDoc(
+  collection(db, "maintenance"),
+  {
+    userId: user.uid,
+    taskName,
+    dueDate,
+    status: "Pending",
+    createdAt: new Date(),
+  }
+);
 
       setTaskName("");
       setDueDate("");

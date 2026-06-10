@@ -5,11 +5,14 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
 import AuthGuard from "@/components/AuthGuard";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 import {
   collection,
   onSnapshot,
+  query,
+  where,
 } from "firebase/firestore";
 
 export default function DashboardPage() {
@@ -26,102 +29,178 @@ export default function DashboardPage() {
   const [maintenance, setMaintenance] =
     useState<any[]>([]);
 
-  useEffect(() => {
+ useEffect(() => {
 
-    const unsubBills =
-      onSnapshot(
-        collection(db, "bills"),
-        (snapshot) => {
+  const unsubscribeAuth =
+    onAuthStateChanged(
+      auth,
+      (user) => {
 
-          const items: any[] = [];
+        if (!user) return;
 
-          snapshot.forEach((doc) => {
+        const billsQuery =
+          query(
+            collection(db, "bills"),
+            where(
+              "userId",
+              "==",
+              user.uid
+            )
+          );
 
-            items.push({
-              id: doc.id,
-              ...doc.data(),
-            });
+        const subscriptionsQuery =
+          query(
+            collection(
+              db,
+              "subscriptions"
+            ),
+            where(
+              "userId",
+              "==",
+              user.uid
+            )
+          );
 
-          });
+        const documentsQuery =
+          query(
+            collection(
+              db,
+              "documents"
+            ),
+            where(
+              "userId",
+              "==",
+              user.uid
+            )
+          );
 
-          setBills(items);
+        const maintenanceQuery =
+          query(
+            collection(
+              db,
+              "maintenance"
+            ),
+            where(
+              "userId",
+              "==",
+              user.uid
+            )
+          );
 
-        }
-      );
+        const unsubBills =
+          onSnapshot(
+            billsQuery,
+            (snapshot) => {
 
-    const unsubSubscriptions =
-      onSnapshot(
-        collection(db, "subscriptions"),
-        (snapshot) => {
+              const items: any[] = [];
 
-          const items: any[] = [];
+              snapshot.forEach(
+                (doc) => {
 
-          snapshot.forEach((doc) => {
+                  items.push({
+                    id: doc.id,
+                    ...doc.data(),
+                  });
 
-            items.push({
-              id: doc.id,
-              ...doc.data(),
-            });
+                }
+              );
 
-          });
+              setBills(items);
 
-          setSubscriptions(items);
+            }
+          );
 
-        }
-      );
+        const unsubSubscriptions =
+          onSnapshot(
+            subscriptionsQuery,
+            (snapshot) => {
 
-    const unsubDocuments =
-      onSnapshot(
-        collection(db, "documents"),
-        (snapshot) => {
+              const items: any[] = [];
 
-          const items: any[] = [];
+              snapshot.forEach(
+                (doc) => {
 
-          snapshot.forEach((doc) => {
+                  items.push({
+                    id: doc.id,
+                    ...doc.data(),
+                  });
 
-            items.push({
-              id: doc.id,
-              ...doc.data(),
-            });
+                }
+              );
 
-          });
+              setSubscriptions(
+                items
+              );
 
-          setDocuments(items);
+            }
+          );
 
-        }
-      );
+        const unsubDocuments =
+          onSnapshot(
+            documentsQuery,
+            (snapshot) => {
 
-    const unsubMaintenance =
-      onSnapshot(
-        collection(db, "maintenance"),
-        (snapshot) => {
+              const items: any[] = [];
 
-          const items: any[] = [];
+              snapshot.forEach(
+                (doc) => {
 
-          snapshot.forEach((doc) => {
+                  items.push({
+                    id: doc.id,
+                    ...doc.data(),
+                  });
 
-            items.push({
-              id: doc.id,
-              ...doc.data(),
-            });
+                }
+              );
 
-          });
+              setDocuments(
+                items
+              );
 
-          setMaintenance(items);
+            }
+          );
 
-        }
-      );
+        const unsubMaintenance =
+          onSnapshot(
+            maintenanceQuery,
+            (snapshot) => {
 
-    return () => {
+              const items: any[] = [];
 
-      unsubBills();
-      unsubSubscriptions();
-      unsubDocuments();
-      unsubMaintenance();
+              snapshot.forEach(
+                (doc) => {
 
-    };
+                  items.push({
+                    id: doc.id,
+                    ...doc.data(),
+                  });
 
-  }, []);
+                }
+              );
+
+              setMaintenance(
+                items
+              );
+
+            }
+          );
+
+        return () => {
+
+          unsubBills();
+          unsubSubscriptions();
+          unsubDocuments();
+          unsubMaintenance();
+
+        };
+
+      }
+    );
+
+  return () =>
+    unsubscribeAuth();
+
+}, []);
 
   const unpaidBills =
     bills.filter(
@@ -288,7 +367,7 @@ export default function DashboardPage() {
           <div>
 
             <p className="font-semibold">
-              {subscription.name}
+              {subscription.serviceName}
             </p>
 
             <p className="text-slate-500 text-sm">
@@ -303,7 +382,7 @@ export default function DashboardPage() {
 
             <p className="font-bold">
               $
-              {subscription.amount}
+              {subscription.price}
             </p>
 
             <p className="text-green-600 text-sm">

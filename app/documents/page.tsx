@@ -5,14 +5,15 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
 import AuthGuard from "@/components/AuthGuard";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 import {
   addDoc,
   collection,
   onSnapshot,
-  orderBy,
   query,
+  where,
 } from "firebase/firestore";
 
 export default function DocumentsPage() {
@@ -31,32 +32,57 @@ export default function DocumentsPage() {
 
   useEffect(() => {
 
-    const q = query(
-      collection(db, "documents"),
-      orderBy("createdAt", "desc")
+  const unsubscribeAuth =
+    onAuthStateChanged(
+      auth,
+      (user) => {
+
+        if (!user) return;
+
+        const q = query(
+          collection(db, "documents"),
+          where(
+            "userId",
+            "==",
+            user.uid
+          )
+        );
+
+        const unsubscribeDocs =
+          onSnapshot(
+            q,
+            (snapshot) => {
+
+              const items: any[] = [];
+
+              snapshot.forEach(
+                (doc) => {
+
+                  items.push({
+                    id: doc.id,
+                    ...doc.data(),
+                  });
+
+                }
+              );
+
+              setDocuments(
+                items
+              );
+
+            }
+          );
+
+        return () =>
+          unsubscribeDocs();
+
+      }
     );
 
-    const unsubscribe =
-      onSnapshot(q, (snapshot) => {
+  return () =>
+    unsubscribeAuth();
 
-        const items: any[] = [];
-
-        snapshot.forEach((doc) => {
-
-          items.push({
-            id: doc.id,
-            ...doc.data(),
-          });
-
-        });
-
-        setDocuments(items);
-
-      });
-
-    return () => unsubscribe();
-
-  }, []);
+}, []);
 
   const addDocument = async () => {
 
@@ -71,15 +97,23 @@ export default function DocumentsPage() {
 
     try {
 
-      await addDoc(
-        collection(db, "documents"),
-        {
-          documentName,
-          documentType,
-          expiryDate,
-          createdAt: new Date(),
-        }
-      );
+      const user = auth.currentUser;
+
+if (!user) {
+  alert("Not logged in");
+  return;
+}
+
+await addDoc(
+  collection(db, "documents"),
+  {
+    userId: user.uid,
+    documentName,
+    documentType,
+    expiryDate,
+    createdAt: new Date(),
+  }
+);
 
       setDocumentName("");
       setDocumentType("");

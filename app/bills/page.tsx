@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
 import AuthGuard from "@/components/AuthGuard";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 import {
   addDoc,
@@ -13,6 +14,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  where,
   doc,
   updateDoc,
 } from "firebase/firestore";
@@ -31,58 +33,100 @@ export default function BillsPage() {
     useState<any[]>([]);
 
   useEffect(() => {
-    const q = query(
-      collection(db, "bills"),
-      orderBy("createdAt", "desc")
-    );
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const items: any[] = [];
+  const unsubscribeAuth =
+    onAuthStateChanged(
+      auth,
+      (user) => {
 
-        snapshot.forEach((doc) => {
-          items.push({
-            id: doc.id,
-            ...doc.data(),
-          });
-        });
+        if (!user) return;
 
-        setBills(items);
+        const q = query(
+          collection(db, "bills"),
+          where(
+            "userId",
+            "==",
+            user.uid
+          )
+        );
+
+        const unsubscribeBills =
+          onSnapshot(
+            q,
+            (snapshot) => {
+
+              const items: any[] = [];
+
+              snapshot.forEach(
+                (doc) => {
+
+                  items.push({
+                    id: doc.id,
+                    ...doc.data(),
+                  });
+
+                }
+              );
+
+              setBills(items);
+
+            }
+          );
+
+        return () =>
+          unsubscribeBills();
+
       }
     );
 
-    return () => unsubscribe();
-  }, []);
+  return () =>
+    unsubscribeAuth();
+
+}, []);
 
   const addBill = async () => {
-    if (!billName || !amount || !dueDate) {
-      alert("Complete all fields");
-      return;
-    }
 
-    try {
-      await addDoc(
-        collection(db, "bills"),
-        {
-          billName,
-          amount: Number(amount),
-          dueDate,
-          status: "Unpaid",
-          createdAt: new Date(),
-        }
-      );
+  if (!billName || !amount || !dueDate) {
+    alert("Complete all fields");
+    return;
+  }
 
-      setBillName("");
-      setAmount("");
-      setDueDate("");
+  const user = auth.currentUser;
 
-      alert("Bill Added");
-    } catch (error) {
-      console.error(error);
-      alert("Failed to save bill");
-    }
-  };
+  if (!user) {
+    alert("You must be logged in");
+    return;
+  }
+
+  try {
+
+    await addDoc(
+      collection(db, "bills"),
+      {
+        billName,
+        amount: Number(amount),
+        dueDate,
+        status: "Unpaid",
+        userId: user.uid,
+        createdAt: new Date(),
+      }
+    );
+
+    setBillName("");
+    setAmount("");
+    setDueDate("");
+
+    alert("Bill Added");
+
+  } catch (error) {
+
+    console.error(error);
+
+    alert("Failed to save bill");
+
+  }
+
+};
 const markPaid = async (
   billId: string
 ) => {
